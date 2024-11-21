@@ -29,7 +29,20 @@ This will start a local server, you can click on the link that will appear on th
    "Can you give me more info on the paper related to polyp segmentation?"
 
 
-# Implementation choices
+## Implementation choices
 - For keyword extraction I tried RAKE, YAKE, KeyBERT but none of them was able to extract relevant keywords (e.g. "papers related" was detected as a keyword). As a consequence, I opted for an LLM with structured output. This was because it is important that keywords are correct otherwise no output would be returned by the API with too much noise.
 - To show diversity in the approach, dates and authors were detected using spacy NER. As an alternative, the fields "Author" and "Dates" could have been included in the structure of the structured output.
 - For the intent classification, I opted for Phi, a small LLM (just 2B parameters), since the time for this operations should be rather short and can be handled by a simple LLM.
+
+
+## Functionalities:
+- You can adjust the settings on the left sidebar
+- Whenever you ask something, Phi will perform intent classification, deciding whether the user wants a summary of an existing article or to retrieve new articles.
+- In the case of retrieval:
+   - you will perform NER for dates and authors (with a fine-tuned model on NER) and use an LLM for doing NER at Journal and Keyword level. The LLM will return a structured output. A larger model is better since keyword extraction is important to retrieve useful results when using the API.
+   - I retrieve relevant paper IDs using the eSearch API and then extract data using the eFetch API given the IDs. The result is returned in XML and then parsed to extract relevant data.
+   - An accordion with the retrieved data is then generated
+   - The articles retrieved are stored to be used for possible summarization.
+- In the case of summarisation:
+   - You generate pairwise cosine similarity scores between the user query and the titles of the articles.
+   - The article with the highest similarity to the user query will be taken and summarized with a summarization model. 
