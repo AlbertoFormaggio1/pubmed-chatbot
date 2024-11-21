@@ -3,7 +3,7 @@ from shiny.ui import AccordionPanel
 from typing import List
 from query_descriptor import QueryDescriptor
 import data_retriever
-from parser import run_search_query, retrieve_articles_data
+from parser import Parser
 from htmltools.tags import ul, li, div, strong
 from htmltools import TagList, HTML
 import json, yaml
@@ -21,6 +21,7 @@ welcome_message = ui.markdown(data["welcome_message"])
 retriever = DataRetriever(model_name=config["model_name_keyword_extraction"], url=config["url"], system_prompt=data["retriever_system_prompt"], examples=data["retriever_few_shot_examples"])
 classifier = IntentClassifier(model_name=config["model_name_intent"], url=config["url"], system_prompt=data["classifier_system_prompt"], examples=data["classifier_few_shot_examples"])
 summarizer = Summarizer(config["embedding_model_name"], config["summarization_model_name"])
+parser = Parser(config["database_base_url"])
 
 
 def make_panel(articles, max_abs_len) -> List[AccordionPanel]:
@@ -30,6 +31,7 @@ def make_panel(articles, max_abs_len) -> List[AccordionPanel]:
     :returns: A list of AccordionPanel objects that will form the accordion"""
     panels = []
     for i, article in enumerate(articles):
+        # For each article create a bullet list for title, authors, etc.
         ul_tag = ul()
         for key, value in article.items():
             match key:
@@ -73,7 +75,7 @@ def server(input, output, session):
     retmax = reactive.Value()
     abstract_len = reactive.Value()
     last_articles = reactive.Value({})
-    max_summary_len = reactive.Value()
+    summary_len = reactive.Value()
 
     @reactive.effect
     def _():
@@ -88,7 +90,7 @@ def server(input, output, session):
     @reactive.effect
     def _():
         # Updates the number of max length of the summary
-        max_summary_len.set(input.max_summary_len())
+        summary_len.set(input.max_summary_len())
 
         # Define a callback to run when the user submits a message
     @chat.on_user_submit
@@ -96,12 +98,16 @@ def server(input, output, session):
         # Get the user's input
         user = chat.user_input()
 
+        # Get the user's intent (retrieval/summary), indicating whether the user wants to retrieve articles or summarise previously returned articles.
         intent = classifier.invoke(user).content
 
         if "retrieval" in intent:
+            # Generate a query descriptor describing the user's query
             desc = QueryDescriptor(user, retriever)
-            paper_ids = run_search_query(desc, retmax=retmax.get())
-            articles = retrieve_articles_data(paper_ids)
+            # Retrieve the paper ids using the eSearch API
+            paper_ids = parser.run_search_query(desc, retmax=retmax.get())
+            # Retrieve the paper data using the eFetch API
+            articles = parser.retrieve_articles_data(paper_ids)
 
             if len(articles) > 0:
                 # We found at least a result that we will display
@@ -109,9 +115,12 @@ def server(input, output, session):
                 message = HTML(TagList(div("Sure! Here are the results I found related to your search query:", class_="mb-3"),
                               accordion,
                               div("Let me know if you'd like more details about any of these articles.")))
+
+                # set the history of extracted articles to the articles that were just retrieved.
                 tmp_articles = {}
                 for article in articles:
                     tmp_articles[article["title"]] = article
+
                 last_articles.set(tmp_articles)
 
             else:
@@ -122,8 +131,8 @@ def server(input, output, session):
             if len(last_articles.get().keys()) > 0:
                 # Get the most similar article to the user's query
                 article = summarizer.find_article(last_articles.get(), user)
-                summary = summarizer.summarize_article(article, max_summary_len.get())
-                message = f"This is the summary of the article {article['title']}:\n\n{summary}\n\nIs there anything else I can assist you with?"
+                summary = summarizer.summarize_article(article, summary_len.get())
+                message = f"This is the summary of the article \'{article['title']}\':\n\n{summary}\n\nIs there anything else I can assist you with?"
             else:
                 message = "I'm sorry, but you need to ask me to retrieve some articles before summarizing any of those. Please ask me to retrieve an article."
 

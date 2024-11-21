@@ -3,104 +3,152 @@ import requests
 from urllib.parse import urlencode
 import xml.etree.ElementTree as ET
 from typing import List
+import re
 
-base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+class Parser:
+    def __init__(self, base_url):
+        """
+        Initialize the Parser with a base URL for PubMed queries.
 
-def build_term_field(desc):
-    query_parts = []
-    for kw in desc.keywords:
-        query_parts.append(f"{kw}")
+        :param base_url (str): The base URL for PubMed API endpoints
+        """
+        self.base_url = base_url
 
-    if desc.authors:
-        for author in desc.authors:
-            query_parts.append(f"{author}[Author]")
+    def build_term_field(self, desc):
+        """
+        Construct a search query string from the descriptor's keywords, authors, and journal.
 
-    if desc.journals:
-        for journal in desc.journal:
-            query_parts.append(f"{journal}[Journal]")
+        :param desc (QueryDescriptor): The query descriptor containing search parameters
+        :return: A constructed search term string for PubMed query
+        """
+        query_parts = []
+        for kw in desc.keywords:
+            query_parts.append(f"{kw}")
 
-    return " AND ".join(query_parts)
+        if desc.authors:
+            # Authors are likely to be independent from one another
+            author_parts = []
+            for author in desc.authors:
+                author_parts.append(f"{author}[Author]")
+            query_parts.append(" OR ".join(author_parts))
 
+        if desc.journal:
+            safe_journal = re.sub('[^a-zA-Z\s]', '', desc.journal)
+            query_parts.append(f"{safe_journal}[Journal]")
 
-def run_search_query(desc, retmax=5):
-    search_url = f"{base_url}esearch.fcgi"
-    term = build_term_field(desc)
-    params = {"db": "pubmed", "term": term, "retmode": "json", "retmax": retmax}
+        return " AND ".join(query_parts)
 
-    print(desc.dates)
-    if len(desc.dates) == 2:
-        params["mindate"] = desc.dates[0]
-        params["maxdate"] = desc.dates[1]
+    def run_search_query(self, desc, retmax=5):
+        """
+        Execute a search query on PubMed based on the given descriptor.
 
-    response = query(search_url, params)
+        :param desc (QueryDescriptor): The query descriptor containing search parameters
+        :param retmax (int, optional): Maximum number of results to retrieve. Defaults to 5.
+        :return: A list of PubMed article IDs matching the search criteria
+        """
+        search_url = f"{self.base_url}esearch.fcgi"
+        term = self.build_term_field(desc)
+        params = {"db": "pubmed", "term": term, "retmode": "json", "retmax": retmax}
 
-    data = response.json()
-    return data["esearchresult"].get("idlist", [])
+        # The user must provide 2 dates: one will be the start date, the other will be the end date.
+        if len(desc.dates) == 2:
+            params["mindate"] = desc.dates[0]
+            params["maxdate"] = desc.dates[1]
 
-def retrieve_articles_data(ids):
-    xml_root = run_fetch_query(ids)
-    parsed_articles = parse_xml_tree(xml_root)
-    return parsed_articles
+        response = self.query(search_url, params)
 
-def run_fetch_query(ids):
-    search_url = f"{base_url}efetch.fcgi"
-    params = {"db": "pubmed", "retmode": "xml", "id":",".join(ids)}
+        data = response.json()
+        return data["esearchresult"].get("idlist", [])
 
-    response = query(search_url, params)
+    def retrieve_articles_data(self, ids):
+        """
+        Retrieve and parse full article data for given PubMed article IDs.
 
-    root = ET.fromstring(response.text)
-    return root
+        :param ids (List[str]): List of PubMed article IDs
+        :return: A list of parsed article dictionaries
+        """
+        xml_root = self.run_fetch_query(ids)
+        parsed_articles = self.parse_xml_tree(xml_root)
+        return parsed_articles
 
-def query(url, params):
-    full_url = f"{url}?{urlencode(params, safe='[]')}"
-    print(full_url)
-    response = requests.get(full_url)
-    if response.status_code != 200:
-        raise Exception(f"Search failed with status code: {response.status_code}")
+    def run_fetch_query(self, ids):
+        """
+        Fetch XML data for specific PubMed article IDs.
 
-    return response
+        :param ids (List[str]): List of PubMed article IDs
+        :return: XML root element containing article data
+        """
+        search_url = f"{self.base_url}efetch.fcgi"
+        params = {"db": "pubmed", "retmode": "xml", "id":",".join(ids)}
 
-def parse_xml_tree(root: ET.Element) -> List:
-    articles = []
-    for article in root:
-        cur_article = {}
+        response = self.query(search_url, params)
 
-        # Get the title of the article
-        article_title = article.find('.//ArticleTitle')
-        if article_title is not None:
-            cur_article['title'] = article_title.text or None
+        root = ET.fromstring(response.text)
+        return root
 
-        # Get name and surname of the authors
-        authors = []
-        for author in article.findall(".//Author"):
-            full_name = ""
-            forename = author.find("ForeName")
-            lastname = author.find("LastName")
-            if lastname is not None:
-                full_name += lastname.text
-            if forename is not None:
-                if full_name:
-                    full_name += " "
-                full_name += forename.text
-            authors.append(full_name)
-        cur_article["authors"] = authors
+    def query(self, url, params):
+        """
+        Send a GET request to the specified URL with given parameters.
 
-        # Get the abstract
-        abstract_text = article.find(".//Abstract/AbstractText")
-        if abstract_text is not None:
-            cur_article['abstract'] = abstract_text.text or None
+        :param url (str): The full URL to query
+        :param params (dict): Query parameters
+        :return: Response from the HTTP request
+        :raises Exception: If the request fails with a non-200 status code
+        """
+        full_url = f"{url}?{urlencode(params, safe='[]')}"
+        response = requests.get(full_url)
+        if response.status_code != 200:
+            raise Exception(f"Search failed with status code: {response.status_code}")
 
-        # Get information concerning the Journal
-        journal = article.find(".//Journal/Title")
-        if journal is not None:
-            cur_article["journal"] = journal.text or None
+        return response
 
-        # Get the submission date of the article
-        article_date = article.find(".//ArticleDate")
-        if article_date is not None:
-            cur_article["date"] = f'{article_date.find("Day").text}/{article_date.find("Month").text}/{article_date.find("Year").text}' or None
+    def parse_xml_tree(self, root: ET.Element) -> List:
+        """
+        Parse the XML tree of PubMed articles and extract relevant information.
 
-        articles.append(cur_article)
+        :param root (ET.Element): XML root element containing article data
+        :return: A list of dictionaries, each representing an article with extracted information
+        """
+        articles = []
+        for article in root:
+            cur_article = {}
 
-    return articles
+            # Get the title of the article
+            article_title = article.find('.//ArticleTitle')
+            if article_title is not None:
+                cur_article['title'] = article_title.text or None
+
+            # Get name and surname of the authors
+            authors = []
+            for author in article.findall(".//Author"):
+                full_name = ""
+                forename = author.find("ForeName")
+                lastname = author.find("LastName")
+                if lastname is not None:
+                    full_name += lastname.text
+                if forename is not None:
+                    if full_name:
+                        full_name += " "
+                    full_name += forename.text
+                authors.append(full_name)
+            cur_article["authors"] = authors
+
+            # Get the abstract
+            abstract_text = article.find(".//Abstract/AbstractText")
+            if abstract_text is not None:
+                cur_article['abstract'] = abstract_text.text or None
+
+            # Get information concerning the Journal
+            journal = article.find(".//Journal/Title")
+            if journal is not None:
+                cur_article["journal"] = journal.text or None
+
+            # Get the submission date of the article
+            article_date = article.find(".//ArticleDate")
+            if article_date is not None:
+                cur_article["date"] = f'{article_date.find("Day").text}/{article_date.find("Month").text}/{article_date.find("Year").text}' or None
+
+            articles.append(cur_article)
+
+        return articles
 
