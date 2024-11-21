@@ -8,8 +8,8 @@ from htmltools.tags import ul, li, div, strong
 from htmltools import TagList, HTML
 import json, yaml
 from data_retriever import DataRetriever
-from transformers import pipeline
 from intent_classifier import IntentClassifier
+from summarizer import Summarizer
 
 with open("messages_prompts.json", "r") as f:
     data = json.load(f)
@@ -20,7 +20,8 @@ with open("config.yaml", "r") as f:
 welcome_message = ui.markdown(data["welcome_message"])
 retriever = DataRetriever(model_name=config["model_name_keyword_extraction"], url=config["url"], system_prompt=data["retriever_system_prompt"], examples=data["retriever_few_shot_examples"])
 classifier = IntentClassifier(model_name=config["model_name_intent"], url=config["url"], system_prompt=data["classifier_system_prompt"], examples=data["classifier_few_shot_examples"])
-summarizer = pipeline("summarization", model="google-t5/t5-small")
+summarizer = Summarizer(config["embedding_model_name"], config["summarization_model_name"])
+
 
 def make_panel(articles, max_abs_len) -> List[AccordionPanel]:
     """This function builds a list of panels to add to the accordion that will be displayed by the chatbot
@@ -70,6 +71,7 @@ def server(input, output, session):
     chat = ui.Chat(id="chat", messages=[welcome_message])
     retmax = reactive.Value()
     abstract_len = reactive.Value()
+    last_articles = reactive.Value({})
 
     @reactive.effect
     def _():
@@ -87,9 +89,9 @@ def server(input, output, session):
         # Get the user's input
         user = chat.user_input()
 
-        intent = classifier.invoke(user)
-
-        if intent == "retrieval":
+        intent = classifier.invoke(user).content
+        print(intent)
+        if "retrieval" in intent:
             desc = QueryDescriptor(user, retriever)
             paper_ids = run_search_query(desc, retmax=retmax.get())
             articles = retrieve_articles_data(paper_ids)
@@ -100,18 +102,27 @@ def server(input, output, session):
                 message = HTML(TagList(div("Sure! Here are the results I found related to your search query:", class_="mb-3"),
                               accordion,
                               div("Let me know if you'd like more details about any of these articles.")))
+                tmp_articles = {}
+                for article in articles:
+                    tmp_articles[article["title"]] = article
+                last_articles.set(tmp_articles)
 
             else:
                 # we did not find anything
                 message = "I'm sorry, I was not able to find any article with the search criteria specified."
 
-            # Append a response to the chat
-            await chat.append_message(message)
+
         else:
+            if len(last_articles.get().keys()) > 0:
+                article = summarizer.find_article(last_articles.get(), user)
+            else:
+                message = "You need to ask me to retrieve an article before summarizing it. Please ask me to retrieve an article."
+
             # Retrieve article using semantic similarity
             # Do summary
-            pass
 
+        # Append a response to the chat
+        await chat.append_message(message)
 
 
 app = App(app_ui, server)
