@@ -1,4 +1,6 @@
 from shiny import App, ui, reactive
+from shiny.ui import AccordionPanel
+from typing import List
 from query_descriptor import QueryDescriptor
 import data_retriever
 from parser import run_search_query, retrieve_articles_data
@@ -7,6 +9,7 @@ from htmltools import TagList, HTML
 import json, yaml
 from data_retriever import DataRetriever
 from transformers import pipeline
+from intent_classifier import IntentClassifier
 
 with open("messages_prompts.json", "r") as f:
     data = json.load(f)
@@ -14,13 +17,16 @@ with open("messages_prompts.json", "r") as f:
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
-
-
 welcome_message = ui.markdown(data["welcome_message"])
-retriever = DataRetriever(model_name=config["model_name"], url=config["url"], system_prompt=data["system_prompt"], examples=data["few_shot_examples"])
+retriever = DataRetriever(model_name=config["model_name_keyword_extraction"], url=config["url"], system_prompt=data["retriever_system_prompt"], examples=data["retriever_few_shot_examples"])
+classifier = IntentClassifier(model_name=config["model_name_intent"], url=config["url"], system_prompt=data["classifier_system_prompt"], examples=data["classifier_few_shot_examples"])
 summarizer = pipeline("summarization", model="google-t5/t5-small")
 
-def make_panel(articles, max_abs_len):
+def make_panel(articles, max_abs_len) -> List[AccordionPanel]:
+    """This function builds a list of panels to add to the accordion that will be displayed by the chatbot
+    :param articles: list of articles
+    :param max_abs_len: max length of the abstract that will be displayed
+    :returns: A list of AccordionPanel objects that will form the accordion"""
     panels = []
     for i, article in enumerate(articles):
         ul_tag = ul()
@@ -80,23 +86,32 @@ def server(input, output, session):
     async def _():
         # Get the user's input
         user = chat.user_input()
-        desc = QueryDescriptor(user, retriever)
-        paper_ids = run_search_query(desc, retmax=retmax.get())
-        articles = retrieve_articles_data(paper_ids)
 
-        if len(articles) > 0:
-            # We found at least a result that we will display
-            accordion = create_accordion(articles, max_abs_len = abstract_len.get())
-            message = HTML(TagList(div("Sure! Here are the results I found related to your search query:", class_="mb-3"),
-                          accordion,
-                          div("Let me know if you'd like more details about any of these articles.")))
+        intent = classifier.invoke(user)
 
+        if intent == "retrieval":
+            desc = QueryDescriptor(user, retriever)
+            paper_ids = run_search_query(desc, retmax=retmax.get())
+            articles = retrieve_articles_data(paper_ids)
+
+            if len(articles) > 0:
+                # We found at least a result that we will display
+                accordion = create_accordion(articles, max_abs_len = abstract_len.get())
+                message = HTML(TagList(div("Sure! Here are the results I found related to your search query:", class_="mb-3"),
+                              accordion,
+                              div("Let me know if you'd like more details about any of these articles.")))
+
+            else:
+                # we did not find anything
+                message = "I'm sorry, I was not able to find any article with the search criteria specified."
+
+            # Append a response to the chat
+            await chat.append_message(message)
         else:
-            # we did not find anything
-            message = "I'm sorry, I was not able to find any article with the search criteria specified."
+            # Retrieve article using semantic similarity
+            # Do summary
+            pass
 
-        # Append a response to the chat
-        await chat.append_message(message)
 
 
 app = App(app_ui, server)

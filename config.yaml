@@ -1,2 +1,3 @@
-model_name: "llama3.1:8b-instruct-q4_K_M"
+model_name_keyword_extraction: "llama3.1:8b-instruct-q4_K_M"
+model_name_intent: "phi:latest"
 url: "http://localhost:11434"

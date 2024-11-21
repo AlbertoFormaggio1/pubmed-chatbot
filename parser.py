@@ -103,4 +103,3 @@ def parse_xml_tree(root: ET.Element) -> List:
         articles.append(cur_article)
 
     return articles
-
