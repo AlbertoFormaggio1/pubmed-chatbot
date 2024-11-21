@@ -33,4 +33,3 @@ This will start a local server, you can click on the link that will appear on th
 - For keyword extraction I tried RAKE, YAKE, KeyBERT but none of them was able to extract relevant keywords (e.g. "papers related" was detected as a keyword). As a consequence, I opted for an LLM with structured output. This was because it is important that keywords are correct otherwise no output would be returned by the API with too much noise.
 - To show diversity in the approach, dates and authors were detected using spacy NER. As an alternative, the fields "Author" and "Dates" could have been included in the structure of the structured output.
 - For the intent classification, I opted for Phi, a small LLM (just 2B parameters), since the time for this operations should be rather short and can be handled by a simple LLM.
-- 
