@@ -61,7 +61,8 @@ def create_accordion(articles, max_abs_len):
 app_ui = ui.page_fillable(
     ui.layout_sidebar(
     ui.sidebar(ui.input_slider("max_returns", "Maximum number of articles to return",  min=1, max=15, value=5),
-                    ui.input_numeric("max_abstract_len", "Maximum character length for abstract", value=300), position="left", title="Settings", fill=True, width=350),
+                    ui.input_numeric("max_abstract_len", "Maximum character length for abstract", value=300),
+                    ui.input_numeric("max_summary_len", "Maximum word length of the summary", value=150), position="left", title="Settings", fill=True, width=350),
     ui.panel_title("Your Pubmed Chatbot Assistant"),
     ui.chat_ui("chat"), fillable=True),
     fillable_mobile=True
@@ -72,6 +73,7 @@ def server(input, output, session):
     retmax = reactive.Value()
     abstract_len = reactive.Value()
     last_articles = reactive.Value({})
+    max_summary_len = reactive.Value()
 
     @reactive.effect
     def _():
@@ -83,6 +85,11 @@ def server(input, output, session):
         # Updates the value of the maximum abstract length to avoid truncation
         abstract_len.set(input.max_abstract_len())
 
+    @reactive.effect
+    def _():
+        # Updates the number of max length of the summary
+        max_summary_len.set(input.max_summary_len())
+
         # Define a callback to run when the user submits a message
     @chat.on_user_submit
     async def _():
@@ -90,7 +97,7 @@ def server(input, output, session):
         user = chat.user_input()
 
         intent = classifier.invoke(user).content
-        print(intent)
+
         if "retrieval" in intent:
             desc = QueryDescriptor(user, retriever)
             paper_ids = run_search_query(desc, retmax=retmax.get())
@@ -111,15 +118,17 @@ def server(input, output, session):
                 # we did not find anything
                 message = "I'm sorry, I was not able to find any article with the search criteria specified."
 
+        elif "summary" in intent:
+            if len(last_articles.get().keys()) > 0:
+                # Get the most similar article to the user's query
+                article = summarizer.find_article(last_articles.get(), user)
+                summary = summarizer.summarize_article(article, max_summary_len.get())
+                message = f"This is the summary of the article {article['title']}:\n\n{summary}\n\nIs there anything else I can assist you with?"
+            else:
+                message = "I'm sorry, but you need to ask me to retrieve some articles before summarizing any of those. Please ask me to retrieve an article."
 
         else:
-            if len(last_articles.get().keys()) > 0:
-                article = summarizer.find_article(last_articles.get(), user)
-            else:
-                message = "You need to ask me to retrieve an article before summarizing it. Please ask me to retrieve an article."
-
-            # Retrieve article using semantic similarity
-            # Do summary
+            message = "I'm sorry, but I did not understand. I can only retrieve or summarize a document. What do you want me to do?"
 
         # Append a response to the chat
         await chat.append_message(message)

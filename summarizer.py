@@ -19,3 +19,15 @@ class Summarizer:
         matched_article = articles[article_names[best_match_idx]]
 
         return matched_article
+
+    def summarize_article(self, article, max_length):
+        string_to_summarize = "Paper information:\n"
+        for key, value in article.items():
+            if key == "authors":
+                value = f"{value[0]} et al."
+            string_to_summarize += f"The paper {key} is: {value}\n"
+        print(string_to_summarize)
+
+        summary = self.summarizer(string_to_summarize, max_length=max_length)[0]["summary_text"]
+        return summary
+

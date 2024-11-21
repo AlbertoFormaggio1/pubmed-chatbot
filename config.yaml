@@ -1,5 +1,5 @@
 model_name_keyword_extraction: "llama3.1:8b-instruct-q4_K_M"
 model_name_intent: "phi:latest"
 embedding_model_name: "sentence-transformers/all-MiniLM-L6-v2"
-summarization_model_name: "google-t5/t5-small"
+summarization_model_name: "facebook/bart-large-cnn"
 url: "http://localhost:11434"
