@@ -21,7 +21,7 @@ This will start a local server, you can click on the link that will appear on th
 
 ## Example queries
 1) "Can you retrieve papers related to COVID-19 vaccination?"
-   Extract some details from one of the titles and then you can ask "Can you summarise the paper concerning <insert details from title>?"
+   Extract some details from one of the titles and then you can ask "Can you summarise the paper concerning "insert details from title here"?"
 
 2) "Can you give me information about papers on polyp segmentation with swin transformer written by Vats Anuja on the journal biomedical engineering letters?"
    "Can you give me more info on the paper related to polyp segmentation?"
