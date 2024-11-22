@@ -2,7 +2,6 @@ from shiny import App, ui, reactive
 from shiny.ui import AccordionPanel
 from typing import List
 from query_descriptor import QueryDescriptor
-import data_retriever
 from parser import Parser
 from htmltools.tags import ul, li, div, strong
 from htmltools import TagList, HTML
@@ -18,8 +17,8 @@ with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 welcome_message = ui.markdown(data["welcome_message"])
-retriever = DataRetriever(model_name=config["model_name_keyword_extraction"], url=config["url"], system_prompt=data["retriever_system_prompt"], examples=data["retriever_few_shot_examples"])
-classifier = IntentClassifier(model_name=config["model_name_intent"], url=config["url"], system_prompt=data["classifier_system_prompt"], examples=data["classifier_few_shot_examples"])
+retriever = DataRetriever(model_name=config["model_name_keyword_extraction"], url=config["ollama_url"], system_prompt=data["retriever_system_prompt"], examples=data["retriever_few_shot_examples"])
+classifier = IntentClassifier(model_name=config["model_name_intent"], url=config["ollama_url"], system_prompt=data["classifier_system_prompt"], examples=data["classifier_few_shot_examples"])
 summarizer = Summarizer(config["embedding_model_name"], config["summarization_model_name"])
 parser = Parser(config["database_base_url"])
 

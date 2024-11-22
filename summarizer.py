@@ -45,5 +45,5 @@ class Summarizer:
                 value = f"{value[0]} et al."
             string_to_summarize += f"The paper {key} is: {value}\n"
 
-        summary = self.summarizer(string_to_summarize, min_len=10, max_length=max_length)[0]["summary_text"]
+        summary = self.summarizer(string_to_summarize, min_length=10, max_length=max_length)[0]["summary_text"]
         return summary
