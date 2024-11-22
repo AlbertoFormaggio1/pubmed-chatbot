@@ -2,9 +2,12 @@
 
 ## Requirements
 To start the program locally, you need to:
-1) Install all the requirements with poetry.
+1) (Optional) Depending on the OS and Python version you are using, you need to set python3.11 which was used for the experiment. (If python3.11 is already on your PATH run ```poetry env use python3.11```)
+2) Install all the requirements with poetry.
    ```poetry install```
-2) Install spacy for running NER.
+3) Activate the poetry environment using
+   ```poetry shell```
+4) Install spacy for running NER.
    ```python -m spacy download en```
 
 ## How to run the experiment
